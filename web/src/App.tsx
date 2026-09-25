@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+﻿import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 type Status =
   | 'Новый'
@@ -428,7 +428,6 @@ function App() {
         <Review
           form={form}
           concreteTotal={concreteTotal}
-          surchargeTotal={surchargeTotal}
           orderTotal={orderTotal}
           settings={settings}
           onBack={() => setPage('order')}
@@ -483,11 +482,18 @@ function App() {
           driverId={currentUser.id}
           driverName={currentUser.name}
           onHome={goHome}
-          onOpen={(id) => openOrder(id, 'managerOrder')}
+          onOpen={(id) => openOrder(id, 'driverOrderDetail')}
           onUpdate={updateOrder}
         />
       )}
 
+      {page === 'driverOrderDetail' && selectedOrder && currentUser.role === 'driver' && (
+        <DriverOrderDetail
+          order={selectedOrder}
+          onBack={() => setPage('driver')}
+          onUpdate={updateOrder}
+        />
+      )}
       {page === 'adminUsers' && currentUser.role === 'admin' && (
         <AdminUsers
           users={users}
@@ -858,7 +864,6 @@ function OrderForm({
 function Review({
   form,
   concreteTotal,
-  surchargeTotal,
   orderTotal,
   settings,
   onBack,
@@ -866,7 +871,6 @@ function Review({
 }: {
   form: typeof defaultOrder
   concreteTotal: number
-  surchargeTotal: number
   orderTotal: number
   settings: Settings
   onBack: () => void
