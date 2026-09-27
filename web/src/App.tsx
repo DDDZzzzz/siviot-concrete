@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+mport { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 type Status =
   | 'Новый'
@@ -13,8 +13,16 @@ type Status =
   | 'Отменён'
 
 type Payment = 'Наличные' | 'Карта' | 'Перевод'
+type PaymentStatus = 'Не оплачено' | 'Оплачено'
 
-type Role = 'admin' | 'manager' | 'client' | 'driver'
+type Role =
+  | 'platformAdmin'
+  | 'admin'
+  | 'manager'
+  | 'plantBoss'
+  | 'client'
+  | 'driver'
+  | 'operator'
 
 type User = {
   id: string
@@ -22,6 +30,29 @@ type User = {
   password: string
   name: string
   role: Role
+  enterpriseId?: string
+  plantIds?: string[]
+  active?: boolean
+}
+
+type PlantType = 'concrete' | 'asphalt'
+
+type Plant = {
+  id: string
+  name: string
+  type: PlantType
+  city: string
+  active: boolean
+}
+
+type Enterprise = {
+  id: string
+  name: string
+  shortName: string
+  logoUrl: string
+  active: boolean
+  plants: Plant[]
+  createdAt: string
 }
 
 type Order = {
@@ -34,6 +65,7 @@ type Order = {
   time: string
   phone: string
   payment: Payment
+  paymentStatus?: PaymentStatus
   comment: string
   urgent: boolean
   weekend: boolean
@@ -41,8 +73,16 @@ type Order = {
   status: Status
   driver: string
   driverId?: string
+  vehicleId?: string
+  vehicleNumber?: string
   createdAt: string
   clientId?: string
+  plantId?: string
+  loadedAt?: string
+  departedAt?: string
+  arrivedAt?: string
+  unloadedAt?: string
+  returnedAt?: string
 }
 
 type Settings = {
@@ -63,10 +103,20 @@ type Page =
   | 'orderDetail'
   | 'manager'
   | 'managerOrder'
+  | 'plantBoss'
+  | 'plantBossOrder'
+  | 'operator'
+  | 'production'
+  | 'materials'
+  | 'recipes'
+  | 'vehicles'
+  | 'reports'
   | 'driver'
   | 'driverOrderDetail'
   | 'settings'
   | 'adminUsers'
+  | 'platformAdmin'
+  | 'enterpriseAdmin'
 
 const defaultSettings: Settings = {
   companyName: 'СИВИОТ',
@@ -83,13 +133,48 @@ const defaultSettings: Settings = {
 
 const CompanyContext = createContext('СИВИОТ')
 
+const defaultEnterprises: Enterprise[] = [
+  {
+    id: 'ent-demo',
+    name: 'Демонстрационное предприятие',
+    shortName: 'Демо',
+    logoUrl: '',
+    active: true,
+    createdAt: new Date().toISOString(),
+    plants: [
+      {
+        id: 'plant-maikop',
+        name: 'Майкоп — бетон',
+        type: 'concrete',
+        city: 'Майкоп',
+        active: true,
+      },
+      {
+        id: 'plant-kashekhabl-concrete',
+        name: 'Кошехабль — бетон',
+        type: 'concrete',
+        city: 'Кошехабль',
+        active: true,
+      },
+      {
+        id: 'plant-kashekhabl-asphalt',
+        name: 'Кошехабль — асфальт',
+        type: 'asphalt',
+        city: 'Кошехабль',
+        active: true,
+      },
+    ],
+  },
+]
+
 const defaultUsers: User[] = [
   {
     id: 'u-admin',
     login: 'admin',
     password: 'admin123',
-    name: 'Главный администратор',
-    role: 'admin',
+    name: 'Центральный администратор SIVIOT',
+    role: 'platformAdmin',
+    active: true,
   },
   {
     id: 'u-manager',
@@ -97,6 +182,29 @@ const defaultUsers: User[] = [
     password: 'manager123',
     name: 'Руководитель',
     role: 'manager',
+    enterpriseId: 'ent-demo',
+    plantIds: ['plant-maikop', 'plant-kashekhabl-concrete', 'plant-kashekhabl-asphalt'],
+    active: true,
+  },
+  {
+    id: 'u-plantboss',
+    login: 'boss',
+    password: 'boss123',
+    name: 'Начальник Майкопского завода',
+    role: 'plantBoss',
+    enterpriseId: 'ent-demo',
+    plantIds: ['plant-maikop'],
+    active: true,
+  },
+  {
+    id: 'u-operator',
+    login: 'operator',
+    password: 'operator123',
+    name: 'Тестовый оператор Майкопского завода',
+    role: 'operator',
+    enterpriseId: 'ent-demo',
+    plantIds: ['plant-maikop'],
+    active: true,
   },
   {
     id: 'u-client',
@@ -104,6 +212,8 @@ const defaultUsers: User[] = [
     password: 'client123',
     name: 'Тестовый клиент',
     role: 'client',
+    enterpriseId: 'ent-demo',
+    active: true,
   },
   {
     id: 'u-driver',
@@ -111,19 +221,28 @@ const defaultUsers: User[] = [
     password: 'driver123',
     name: 'Тестовый водитель',
     role: 'driver',
+    enterpriseId: 'ent-demo',
+    plantIds: ['plant-maikop'],
+    active: true,
   },
 ]
 
 function roleName(role: Role) {
   switch (role) {
+    case 'platformAdmin':
+      return 'Центральный администратор SIVIOT'
     case 'admin':
-      return 'Администратор'
+      return 'Администратор предприятия'
     case 'manager':
-      return 'Руководство'
+      return 'Руководитель'
+    case 'plantBoss':
+      return 'Начальник завода'
     case 'client':
       return 'Клиент'
     case 'driver':
       return 'Водитель'
+    case 'operator':
+      return 'Оператор'
   }
 }
 
@@ -155,6 +274,17 @@ function App() {
       return defaultUsers
     }
   })
+
+  const [enterprises, setEnterprises] = useState<Enterprise[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('siviotEnterprises') || 'null')
+      return Array.isArray(saved) && saved.length ? saved : defaultEnterprises
+    } catch {
+      return defaultEnterprises
+    }
+  })
+
+  const [selectedEnterpriseId, setSelectedEnterpriseId] = useState<string | null>(null)
 
   const [currentUser, setCurrentUser] = useState<User | null>(null)
 
@@ -220,12 +350,16 @@ function App() {
   }, [users])
 
   useEffect(() => {
+    localStorage.setItem('siviotEnterprises', JSON.stringify(enterprises))
+  }, [enterprises])
+
+  useEffect(() => {
     const savedId = localStorage.getItem('concreteCurrentUser')
     if (savedId) {
       const savedUser = users.find((u) => u.id === savedId)
       if (savedUser) {
         setCurrentUser(savedUser)
-        setPage('home')
+        setPage(savedUser.role === 'platformAdmin' ? 'platformAdmin' : 'home')
       }
     }
   }, [])
@@ -249,16 +383,27 @@ function App() {
 
   function login(loginValue: string, passwordValue: string): boolean {
     const found = users.find(
-      (u) => u.login === loginValue.trim() && u.password === passwordValue,
+      (u) =>
+        u.login === loginValue.trim() &&
+        u.password === passwordValue &&
+        u.active !== false,
     )
 
     if (!found) {
       return false
     }
 
+    if (
+      found.role !== 'platformAdmin' &&
+      found.enterpriseId &&
+      !enterprises.some((enterprise) => enterprise.id === found.enterpriseId && enterprise.active)
+    ) {
+      return false
+    }
+
     setCurrentUser(found)
     localStorage.setItem('concreteCurrentUser', found.id)
-    setPage('home')
+    setPage(found.role === 'platformAdmin' ? 'platformAdmin' : 'home')
     return true
   }
 
@@ -266,6 +411,7 @@ function App() {
     localStorage.removeItem('concreteCurrentUser')
     setCurrentUser(null)
     setSelectedOrderId(null)
+    setSelectedEnterpriseId(null)
     setPage('login')
   }
 
@@ -312,6 +458,7 @@ function App() {
 
     const newOrder: Order = {
       ...form,
+      paymentStatus: 'Не оплачено',
       id: generateOrderNumber(),
       volume: Number(form.volume),
       deliveryCost: Number(form.deliveryCost),
@@ -385,12 +532,66 @@ function App() {
   return (
     <CompanyContext.Provider value={settings.companyName}>
       <>
+      {page === 'platformAdmin' && currentUser.role === 'platformAdmin' && (
+        <PlatformAdmin
+          enterprises={enterprises}
+          users={users}
+          onAddEnterprise={(enterprise) =>
+            setEnterprises((prev) => [...prev, enterprise])
+          }
+          onUpdateEnterprise={(id, changes) =>
+            setEnterprises((prev) =>
+              prev.map((enterprise) =>
+                enterprise.id === id ? { ...enterprise, ...changes } : enterprise,
+              ),
+            )
+          }
+          onManageEnterprise={(id) => {
+            setSelectedEnterpriseId(id)
+            setPage('enterpriseAdmin')
+          }}
+          onLogout={logout}
+        />
+      )}
+
+      {page === 'enterpriseAdmin' &&
+        currentUser.role === 'platformAdmin' &&
+        selectedEnterpriseId && (
+          <EnterpriseAdmin
+            enterprise={enterprises.find((item) => item.id === selectedEnterpriseId)!}
+            users={users.filter((user) => user.enterpriseId === selectedEnterpriseId)}
+            onBack={() => setPage('platformAdmin')}
+            onUpdateEnterprise={(changes) =>
+              setEnterprises((prev) =>
+                prev.map((item) =>
+                  item.id === selectedEnterpriseId
+                    ? { ...item, ...changes }
+                    : item,
+                ),
+              )
+            }
+            onAddUser={(user) => setUsers((prev) => [...prev, user])}
+            onUpdateUser={(id, changes) =>
+              setUsers((prev) =>
+                prev.map((user) =>
+                  user.id === id ? { ...user, ...changes } : user,
+                ),
+              )
+            }
+            onDeleteUser={(id) =>
+              setUsers((prev) => prev.filter((user) => user.id !== id))
+            }
+          />
+        )}
+
       {page === 'home' && (
         <Home
           user={currentUser}
           companyName={settings.companyName}
           onClient={() => setPage('client')}
           onManager={() => setPage('manager')}
+          onPlantBoss={() => setPage('plantBoss')}
+          onOperator={() => setPage('operator')}
           onDriver={() => setPage('driver')}
           onSettings={() => setPage('settings')}
           onAdminUsers={() => setPage('adminUsers')}
@@ -428,6 +629,7 @@ function App() {
         <Review
           form={form}
           concreteTotal={concreteTotal}
+          surchargeTotal={surchargeTotal}
           orderTotal={orderTotal}
           settings={settings}
           onBack={() => setPage('order')}
@@ -462,6 +664,12 @@ function App() {
       {page === 'manager' && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
         <Manager
           orders={orders}
+          user={currentUser}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : enterprises[0] || null
+          }
           onHome={goHome}
           onOpen={(id) => openOrder(id, 'managerOrder')}
         />
@@ -471,7 +679,123 @@ function App() {
         <ManagerOrder
           order={selectedOrder}
           drivers={users.filter((user) => user.role === 'driver')}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : enterprises[0] || null
+          }
           onBack={() => setPage('manager')}
+          onUpdate={updateOrder}
+        />
+      )}
+
+      {page === 'plantBoss' && currentUser.role === 'plantBoss' && (
+        <PlantBoss
+          orders={orders}
+          user={currentUser}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : null
+          }
+          onHome={goHome}
+          onOpen={(id) => openOrder(id, 'plantBossOrder')}
+          onProduction={() => setPage('production')}
+          onMaterials={() => setPage('materials')}
+          onRecipes={() => setPage('recipes')}
+          onVehicles={() => setPage('vehicles')}
+          onReports={() => setPage('reports')}
+        />
+      )}
+
+      {page === 'plantBossOrder' && selectedOrder && currentUser.role === 'plantBoss' && (
+        <PlantBossOrder
+          order={selectedOrder}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : null
+          }
+          onBack={() => setPage('plantBoss')}
+          onUpdate={updateOrder}
+        />
+      )}
+
+      {page === 'production' && currentUser.role === 'plantBoss' && (
+        <Production
+          orders={orders}
+          user={currentUser}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : null
+          }
+          onBack={() => setPage('plantBoss')}
+          onOpen={(id) => openOrder(id, 'plantBossOrder')}
+          onUpdate={updateOrder}
+        />
+      )}
+
+      {page === 'materials' && currentUser.role === 'plantBoss' && (
+        <Materials
+          user={currentUser}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : null
+          }
+          onBack={() => setPage('plantBoss')}
+        />
+      )}
+
+      {page === 'recipes' && currentUser.role === 'plantBoss' && (
+        <Recipes
+          user={currentUser}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : null
+          }
+          onBack={() => setPage('plantBoss')}
+        />
+      )}
+
+      {page === 'vehicles' && currentUser.role === 'plantBoss' && (
+        <Vehicles
+          user={currentUser}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : null
+          }
+          onBack={() => setPage('plantBoss')}
+        />
+      )}
+
+      {page === 'reports' && currentUser.role === 'plantBoss' && (
+        <Reports
+          orders={orders}
+          user={currentUser}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : null
+          }
+          onBack={() => setPage('plantBoss')}
+        />
+      )}
+
+      {page === 'operator' && currentUser.role === 'operator' && (
+        <Operator
+          orders={orders}
+          user={currentUser}
+          enterprise={
+            currentUser.enterpriseId
+              ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
+              : null
+          }
+          onHome={goHome}
+          onOpen={(id) => openOrder(id, 'managerOrder')}
           onUpdate={updateOrder}
         />
       )}
@@ -482,18 +806,11 @@ function App() {
           driverId={currentUser.id}
           driverName={currentUser.name}
           onHome={goHome}
-          onOpen={(id) => openOrder(id, 'driverOrderDetail')}
+          onOpen={(id) => openOrder(id, 'managerOrder')}
           onUpdate={updateOrder}
         />
       )}
 
-      {page === 'driverOrderDetail' && selectedOrder && currentUser.role === 'driver' && (
-        <DriverOrderDetail
-          order={selectedOrder}
-          onBack={() => setPage('driver')}
-          onUpdate={updateOrder}
-        />
-      )}
       {page === 'adminUsers' && currentUser.role === 'admin' && (
         <AdminUsers
           users={users}
@@ -525,6 +842,8 @@ function Home({
   companyName,
   onClient,
   onManager,
+  onPlantBoss,
+  onOperator,
   onDriver,
   onSettings,
   onAdminUsers,
@@ -534,6 +853,8 @@ function Home({
   companyName: string
   onClient: () => void
   onManager: () => void
+  onPlantBoss: () => void
+  onOperator: () => void
   onDriver: () => void
   onSettings: () => void
   onAdminUsers: () => void
@@ -546,11 +867,10 @@ function Home({
     >
       <div style={styles.hero}>
         <BrandLogo size={78} />
-        <div style={{ position: 'relative', zIndex: 1 }}>
+        <div>
           <div style={styles.heroKicker}>{companyName}</div>
           <div style={styles.heroText}>Бетон • Доставка • Контроль</div>
         </div>
-        <div style={styles.heroGlow} />
       </div>
 
       <div style={styles.grid}>
@@ -569,6 +889,24 @@ function Home({
             title="Руководство"
             subtitle="Управление заказами и производством"
             onClick={onManager}
+          />
+        )}
+
+        {user.role === 'plantBoss' && (
+          <BigButton
+            icon="👷"
+            title="Начальник завода"
+            subtitle="Заказы, производство, склад и транспорт"
+            onClick={onPlantBoss}
+          />
+        )}
+
+        {user.role === 'operator' && (
+          <BigButton
+            icon="🏗️"
+            title="Оператор завода"
+            subtitle="Очередь загрузки и отгрузка"
+            onClick={onOperator}
           />
         )}
 
@@ -864,6 +1202,7 @@ function OrderForm({
 function Review({
   form,
   concreteTotal,
+  surchargeTotal,
   orderTotal,
   settings,
   onBack,
@@ -871,6 +1210,7 @@ function Review({
 }: {
   form: typeof defaultOrder
   concreteTotal: number
+  surchargeTotal: number
   orderTotal: number
   settings: Settings
   onBack: () => void
@@ -1030,8 +1370,10 @@ function OrderDetail({
         <InfoRow title="Дата" value={order.date} />
         <InfoRow title="Время" value={order.time} />
         <InfoRow title="Телефон" value={order.phone} />
-        <InfoRow title="Оплата" value={order.payment} />
-        <InfoRow title="Водитель" value={order.driver || 'Не назначен'} />
+        <InfoRow title="Способ оплаты" value={order.payment} />
+        <InfoRow title="Статус оплаты" value={order.paymentStatus || 'Не оплачено'} />
+        <InfoRow title="Машина" value={order.vehicleNumber || "Не назначена"} />
+        <InfoRow title="Водитель" value={order.driver || "Не назначен"} />
         <InfoRow title="Комментарий" value={order.comment || '—'} />
 
         <div style={styles.totalRow}>
@@ -1060,100 +1402,231 @@ function OrderDetail({
 
 function Manager({
   orders,
+  user,
+  enterprise,
   onHome,
   onOpen,
 }: {
   orders: Order[]
+  user: User
+  enterprise: Enterprise | null
   onHome: () => void
   onOpen: (id: string) => void
 }) {
+  const availablePlants = useMemo(() => {
+    if (!enterprise) return []
+    const assignedIds =
+      user.role === 'manager' && user.plantIds?.length
+        ? user.plantIds
+        : enterprise.plants.map((plant) => plant.id)
+
+    return enterprise.plants.filter(
+      (plant) => plant.active && assignedIds.includes(plant.id),
+    )
+  }, [enterprise, user])
+
+  const [selectedPlantIds, setSelectedPlantIds] = useState<string[]>(
+    availablePlants.map((plant) => plant.id),
+  )
   const [filter, setFilter] = useState<'Все' | Status>('Все')
 
-  const filteredOrders = useMemo(() => {
-    if (filter === 'Все') return orders
+  useEffect(() => {
+    setSelectedPlantIds((prev) => {
+      const valid = prev.filter((id) =>
+        availablePlants.some((plant) => plant.id === id),
+      )
+      return valid.length ? valid : availablePlants.map((plant) => plant.id)
+    })
+  }, [availablePlants])
 
+  const selectedOrders = useMemo(() => {
+    if (!selectedPlantIds.length) return []
     return orders.filter(
-      (order) => order.status === filter,
+      (order) => order.plantId && selectedPlantIds.includes(order.plantId),
     )
-  }, [orders, filter])
+  }, [orders, selectedPlantIds])
 
-  const activeCount = orders.filter(
+  const unassignedOrders = useMemo(
+    () => orders.filter((order) => !order.plantId),
+    [orders],
+  )
+
+  const filteredOrders = useMemo(() => {
+    if (filter === 'Все') return selectedOrders
+    return selectedOrders.filter((order) => order.status === filter)
+  }, [selectedOrders, filter])
+
+  const activeCount = selectedOrders.filter(
     (o) => o.status !== 'Завершён' && o.status !== 'Отменён',
   ).length
 
+  function togglePlant(id: string) {
+    setSelectedPlantIds((prev) =>
+      prev.includes(id)
+        ? prev.filter((plantId) => plantId !== id)
+        : [...prev, id],
+    )
+  }
+
+  function selectAllPlants() {
+    setSelectedPlantIds(availablePlants.map((plant) => plant.id))
+  }
+
+  function clearPlants() {
+    setSelectedPlantIds([])
+  }
+
   return (
-    <Page title="Начальник / оператор" subtitle="Управление заказами">
+    <Page title="Руководитель" subtitle="Выбор объектов и управление заказами">
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>МОИ ПРОИЗВОДСТВЕННЫЕ ОБЪЕКТЫ</div>
+        <p style={styles.muted}>
+          Выберите один или несколько заводов. После выбора ниже отображаются
+          только заказы выбранных объектов.
+        </p>
+
+        {availablePlants.length === 0 ? (
+          <Empty text="Активных назначенных заводов пока нет." />
+        ) : (
+          <>
+            <div style={styles.twoColumns}>
+              <button style={styles.secondaryButton} onClick={selectAllPlants}>
+                ☑️ Выбрать все
+              </button>
+              <button style={styles.secondaryButton} onClick={clearPlants}>
+                Снять выбор
+              </button>
+            </div>
+
+            <div style={styles.list}>
+              {availablePlants.map((plant) => {
+                const selected = selectedPlantIds.includes(plant.id)
+                return (
+                  <button
+                    key={plant.id}
+                    style={{
+                      ...styles.card,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      border: selected
+                        ? '2px solid #2563eb'
+                        : '1px solid #e2e8f0',
+                      background: selected ? '#eff6ff' : '#ffffff',
+                    }}
+                    onClick={() => togglePlant(plant.id)}
+                  >
+                    <div style={styles.cardHeader}>
+                      <div>
+                        <strong>{plant.name}</strong>
+                        <div style={styles.muted}>
+                          {plant.city} •{' '}
+                          {plant.type === 'concrete'
+                            ? 'Бетонный завод'
+                            : 'Асфальтный завод'}
+                        </div>
+                      </div>
+                      <span style={styles.badge}>
+                        {selected ? 'Выбран' : 'Не выбран'}
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
       <div style={styles.stats}>
-        <Stat title="Всего" value={orders.length} />
-
+        <Stat title="Выбрано заводов" value={selectedPlantIds.length} />
+        <Stat title="Заказов" value={selectedOrders.length} />
         <Stat title="Активных" value={activeCount} />
-
         <Stat
-          title="Новых"
-          value={
-            orders.filter(
-              (o) => o.status === 'Новый',
-            ).length
-          }
+          title="Нераспределённых"
+          value={unassignedOrders.length}
         />
       </div>
 
-      <select
-        style={styles.input}
-        value={filter}
-        onChange={(e) =>
-          setFilter(e.target.value as 'Все' | Status)
-        }
-      >
-        <option value="Все">Все заказы</option>
-        <option value="Новый">Новые</option>
-        <option value="Подтверждён">Подтверждённые</option>
-        <option value="Запланирован">Запланированные</option>
-        <option value="Производство">Производство</option>
-        <option value="Погружен">Погружены</option>
-        <option value="В пути">В пути</option>
-        <option value="Доставлен">Доставлены</option>
-        <option value="Оплачен">Оплачены</option>
-        <option value="Завершён">Завершённые</option>
-        <option value="Отменён">Отменённые</option>
-      </select>
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>РАБОЧАЯ ОЧЕРЕДЬ</div>
 
-      <div style={styles.list}>
-        {filteredOrders.length === 0 ? (
-          <Empty text="Заказов нет." />
+        <select
+          style={styles.input}
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as 'Все' | Status)}
+        >
+          <option value="Все">Все заказы</option>
+          <option value="Новый">Новые</option>
+          <option value="Подтверждён">Подтверждённые</option>
+          <option value="Запланирован">Запланированные</option>
+          <option value="Производство">Производство</option>
+          <option value="Погружен">Погружены</option>
+          <option value="В пути">В пути</option>
+          <option value="Доставлен">Доставлены</option>
+          <option value="Оплачен">Оплаченные</option>
+          <option value="Завершён">Завершённые</option>
+          <option value="Отменён">Отменённые</option>
+        </select>
+
+        {!selectedPlantIds.length ? (
+          <Empty text="Выберите хотя бы один завод выше." />
+        ) : filteredOrders.length === 0 ? (
+          <Empty text="Для выбранных заводов заказов с таким статусом пока нет." />
         ) : (
-          filteredOrders.map((order) => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              onClick={() => onOpen(order.id)}
-            />
-          ))
+          <div style={styles.list}>
+            {filteredOrders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                onClick={() => onOpen(order.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
+
+      {unassignedOrders.length > 0 && (
+        <div style={styles.card}>
+          <div style={styles.sectionLabel}>ЗАКАЗЫ БЕЗ НАЗНАЧЕННОГО ЗАВОДА</div>
+          <p style={styles.muted}>
+            Эти заказы ещё не привязаны к производственному объекту. Их можно
+            открыть и назначить завод в карточке заказа.
+          </p>
+          <div style={styles.list}>
+            {unassignedOrders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                onClick={() => onOpen(order.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       <BackButton onClick={onHome} text="На главную" />
     </Page>
   )
 }
 
-/* =========================
-   MANAGER ORDER
-========================= */
-
 function ManagerOrder({
   order,
   drivers,
+  enterprise,
   onBack,
   onUpdate,
 }: {
   order: Order
   drivers: User[]
+  enterprise: Enterprise | null
   onBack: () => void
   onUpdate: (id: string, changes: Partial<Order>) => void
 }) {
   const [driverId, setDriverId] = useState(order.driverId || '')
+  const [plantId, setPlantId] = useState(order.plantId || '')
   const selectedDriver = drivers.find((driver) => driver.id === driverId)
+
+  const activePlants = enterprise?.plants.filter((plant) => plant.active) || []
 
   const nextStatuses: Status[] = [
     'Новый',
@@ -1169,6 +1642,16 @@ function ManagerOrder({
 
   function changeStatus(status: Status) {
     onUpdate(order.id, { status })
+  }
+
+  function assignPlant() {
+    if (!plantId) {
+      alert('Выберите производственный объект')
+      return
+    }
+
+    onUpdate(order.id, { plantId })
+    alert('Производственный объект назначен')
   }
 
   function assignDriver() {
@@ -1196,79 +1679,809 @@ function ManagerOrder({
         <InfoRow title="Дата" value={order.date} />
         <InfoRow title="Время" value={order.time} />
         <InfoRow title="Телефон" value={order.phone} />
-        <InfoRow title="Оплата" value={order.payment} />
+        <InfoRow title="Способ оплаты" value={order.payment} />
+        <InfoRow title="Статус оплаты" value={order.paymentStatus || 'Не оплачено'} />
+        <InfoRow title="Сумма" value={`${order.total.toFixed(2)} €`} />
+        <InfoRow title="Водитель" value={order.driver || 'Не назначен'} />
         <InfoRow
-          title="Сумма"
-          value={`${order.total.toFixed(2)} €`}
-        />
-        <InfoRow
-          title="Комментарий"
-          value={order.comment || '—'}
+          title="Завод"
+          value={
+            activePlants.find((plant) => plant.id === order.plantId)?.name ||
+            'Не назначен'
+          }
         />
       </div>
 
-      <h3>Статус заказа</h3>
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>НАЗНАЧЕНИЕ ПРОИЗВОДСТВА</div>
 
-      <div style={styles.statusButtons}>
-        {nextStatuses.map((status) => (
-          <button
-            key={status}
-            style={{
-              ...styles.statusButton,
-              ...(order.status === status
-                ? styles.statusButtonActive
-                : {}),
-            }}
-            onClick={() => changeStatus(status)}
+        <label style={styles.label}>
+          Производственный объект
+          <select
+            style={styles.input}
+            value={plantId}
+            onChange={(e) => setPlantId(e.target.value)}
           >
-            {status}
-          </button>
-        ))}
+            <option value="">Выберите завод</option>
+            {activePlants.map((plant) => (
+              <option key={plant.id} value={plant.id}>
+                {plant.name} — {plant.city}
+              </option>
+            ))}
+          </select>
+        </label>
 
-        <button
-          style={{
-            ...styles.statusButton,
-            background: '#fee2e2',
-          }}
-          onClick={() => changeStatus('Отменён')}
-        >
-          Отменить
+        <button style={styles.primaryButton} onClick={assignPlant}>
+          🏭 Назначить завод
         </button>
       </div>
 
-      <h3>Назначение водителя</h3>
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>НАЗНАЧЕНИЕ ВОДИТЕЛЯ</div>
 
-      <select
-        style={styles.input}
-        value={driverId}
-        onChange={(e) => setDriverId(e.target.value)}
-      >
-        <option value="">Выберите водителя</option>
-        {drivers.map((driver) => (
-          <option key={driver.id} value={driver.id}>
-            {driver.name} — {driver.login}
-          </option>
-        ))}
-      </select>
+        <label style={styles.label}>
+          Водитель
+          <select
+            style={styles.input}
+            value={driverId}
+            onChange={(e) => setDriverId(e.target.value)}
+          >
+            <option value="">Выберите водителя</option>
+            {drivers.map((driver) => (
+              <option key={driver.id} value={driver.id}>
+                {driver.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <button
-        style={styles.primaryButton}
-        onClick={assignDriver}
-      >
-        Назначить водителя
-      </button>
+        <button style={styles.primaryButton} onClick={assignDriver}>
+          🚚 Назначить водителя
+        </button>
+      </div>
 
-      <BackButton
-        onClick={onBack}
-        text="Назад к заказам"
-      />
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ОПЛАТА</div>
+        <p style={styles.muted}>Оплата не меняет этап доставки. Её можно отметить отдельно после получения платежа.</p>
+        {order.paymentStatus === 'Оплачено' ? (
+          <div style={styles.successBox}>Оплата отмечена: оплачено</div>
+        ) : (
+          <button
+            style={styles.primaryButton}
+            onClick={() => onUpdate(order.id, { paymentStatus: 'Оплачено' })}
+          >
+            💳 ОТМЕТИТЬ КАК ОПЛАЧЕНО
+          </button>
+        )}
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>СТАТУС ЗАКАЗА</div>
+
+        <div style={styles.list}>
+          {nextStatuses.map((status) => (
+            <button
+              key={status}
+              style={
+                order.status === status
+                  ? styles.primaryButton
+                  : styles.secondaryButton
+              }
+              onClick={() => changeStatus(status)}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <BackButton onClick={onBack} text="Назад к руководству" />
     </Page>
   )
 }
 
+
 /* =========================
-   DRIVER
+   PLANT BOSS
 ========================= */
+
+function PlantBoss({
+  orders,
+  user,
+  enterprise,
+  onHome,
+  onOpen,
+  onProduction,
+  onMaterials,
+  onRecipes,
+  onVehicles,
+  onReports,
+}: {
+  orders: Order[]
+  user: User
+  enterprise: Enterprise | null
+  onHome: () => void
+  onOpen: (id: string) => void
+  onProduction: () => void
+  onMaterials: () => void
+  onRecipes: () => void
+  onVehicles: () => void
+  onReports: () => void
+}) {
+  const plants = enterprise?.plants.filter(
+    (plant) => plant.active && (user.plantIds || []).includes(plant.id),
+  ) || []
+  const [plantId, setPlantId] = useState(plants[0]?.id || '')
+  useEffect(() => {
+    if (!plants.some((plant) => plant.id === plantId)) setPlantId(plants[0]?.id || '')
+  }, [plants, plantId])
+
+  const plantOrders = orders.filter((order) => order.plantId === plantId)
+  const active = plantOrders.filter((o) => !['Завершён', 'Отменён'].includes(o.status))
+  const newOrders = plantOrders.filter((o) => o.status === 'Новый')
+  const productionOrders = plantOrders.filter((o) =>
+    ['Подтверждён', 'Запланирован', 'Производство'].includes(o.status),
+  )
+  const delivered = plantOrders.filter((o) => ['Доставлен', 'Оплачен', 'Завершён'].includes(o.status))
+
+  const selectedPlant = plants.find((plant) => plant.id === plantId)
+
+  return (
+    <Page
+      title="Начальник завода"
+      subtitle={selectedPlant ? `${selectedPlant.name} • ${selectedPlant.city}` : 'Выберите производственный объект'}
+    >
+      {plants.length === 0 ? (
+        <Empty text="Вам не назначен активный завод." />
+      ) : (
+        <>
+          <div style={styles.card}>
+            <div style={styles.sectionLabel}>МОЙ ЗАВОД</div>
+            <select
+              style={styles.input}
+              value={plantId}
+              onChange={(e) => setPlantId(e.target.value)}
+            >
+              {plants.map((plant) => (
+                <option key={plant.id} value={plant.id}>
+                  {plant.name} — {plant.type === 'concrete' ? 'бетон' : 'асфальт'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={styles.stats}>
+            <Stat title="Активных заказов" value={active.length} />
+            <Stat title="Новых" value={newOrders.length} />
+            <Stat title="В производстве" value={productionOrders.length} />
+            <Stat title="Завершено" value={delivered.length} />
+          </div>
+
+          <div style={styles.grid}>
+            <BigButton icon="📋" title="Заказы" subtitle={`${plantOrders.length} заказов по заводу`} onClick={() => {}} />
+            <BigButton icon="🏗️" title="Производство" subtitle="Очередь сегодняшней загрузки" onClick={onProduction} />
+            <BigButton icon="📦" title="Склад" subtitle="Материалы, приход и расход" onClick={onMaterials} />
+            {selectedPlant?.type === 'concrete' && (
+              <BigButton icon="🧪" title="Рецептуры" subtitle="Составы бетона и нормы расхода" onClick={onRecipes} />
+            )}
+            <BigButton icon="🚚" title="Машины" subtitle="Автомобили и водители" onClick={onVehicles} />
+            <BigButton icon="📊" title="Отчёты" subtitle="Производство, отгрузка и остатки" onClick={onReports} />
+          </div>
+
+          <div style={styles.card}>
+            <div style={styles.sectionLabel}>НОВЫЕ ЗАКАЗЫ</div>
+            {newOrders.length === 0 ? (
+              <Empty text="Новых заказов для этого завода нет." />
+            ) : (
+              <div style={styles.list}>
+                {newOrders.slice(0, 6).map((order) => (
+                  <OrderCard key={order.id} order={order} onClick={() => onOpen(order.id)} />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <BackButton onClick={onHome} text="На главную" />
+    </Page>
+  )
+}
+
+function PlantBossOrder({
+  order,
+  enterprise,
+  onBack,
+  onUpdate,
+}: {
+  order: Order
+  enterprise: Enterprise | null
+  onBack: () => void
+  onUpdate: (id: string, changes: Partial<Order>) => void
+}) {
+  const [deliveryCost, setDeliveryCost] = useState(order.deliveryCost)
+  const [vehicleId, setVehicleId] = useState(order.vehicleId || '')
+  const activePlants = enterprise?.plants.filter((plant) => plant.active) || []
+  const [vehicles] = useState<{ id: string; number: string; model: string; driver: string }[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`siviotVehicles:${enterprise?.id || 'none'}`) || '[]')
+    } catch {
+      return []
+    }
+  })
+  const selectedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId)
+
+  function save() {
+    const nextDelivery = Math.max(0, Number(deliveryCost) || 0)
+    onUpdate(order.id, {
+      deliveryCost: nextDelivery,
+      total: Math.max(0, order.total - order.deliveryCost + nextDelivery),
+      vehicleId: selectedVehicle?.id,
+      vehicleNumber: selectedVehicle?.number,
+      driver: selectedVehicle?.driver || order.driver,
+      status: order.status === 'Новый' ? 'Подтверждён' : order.status,
+    })
+    alert('Заказ подтверждён и сохранён')
+  }
+
+  return (
+    <Page title={order.id} subtitle="Управление заказом начальником завода">
+      <div style={styles.card}>
+        <StatusBadge status={order.status} />
+        <InfoRow title="Материал / марка" value={order.grade} />
+        <InfoRow title="Объём" value={`${order.volume} м³`} />
+        <InfoRow title="Адрес" value={order.address} />
+        <InfoRow title="Дата и время" value={`${order.date} • ${order.time}`} />
+        <InfoRow title="Водитель" value={order.driver || 'Не назначен'} />
+        <InfoRow title="Стоимость заказа" value={`${order.total.toFixed(2)} €`} />
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ПЛАНИРОВАНИЕ</div>
+        <label style={styles.label}>
+          Завод
+          <select style={styles.input} value={order.plantId || ''} disabled>
+            <option value="">Не назначен</option>
+            {activePlants.map((plant) => (
+              <option key={plant.id} value={plant.id}>{plant.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label style={styles.label}>
+          Стоимость доставки, €
+          <input
+            style={styles.input}
+            type="number"
+            min="0"
+            value={deliveryCost}
+            onChange={(e) => setDeliveryCost(Number(e.target.value))}
+          />
+        </label>
+
+        <label style={styles.label}>
+          Машина
+          <select
+            style={styles.input}
+            value={vehicleId}
+            onChange={(e) => setVehicleId(e.target.value)}
+          >
+            <option value="">Не назначена</option>
+            {vehicles.map((vehicle) => (
+              <option key={vehicle.id} value={vehicle.id}>
+                {vehicle.number} {vehicle.model ? `• ${vehicle.model}` : ''} {vehicle.driver ? `• ${vehicle.driver}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button style={styles.primaryButton} onClick={save}>
+          ✅ Подтвердить и сохранить
+        </button>
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>СТАТУС ПРОИЗВОДСТВА</div>
+        <div style={styles.list}>
+          {(['Новый', 'Подтверждён', 'Запланирован', 'Производство'] as Status[]).map((status) => (
+            <button
+              key={status}
+              style={order.status === status ? styles.primaryButton : styles.secondaryButton}
+              onClick={() => onUpdate(order.id, { status })}
+            >
+              {status}
+            </button>
+          ))}
+          <div style={styles.muted}>
+            Факт загрузки подтверждает оператор завода. Начальник только принимает заказ, назначает завод, машину и водителя, а затем контролирует результат.
+          </div>
+        </div>
+      </div>
+
+      <BackButton onClick={onBack} text="Назад к заводу" />
+    </Page>
+  )
+}
+
+function Production({
+  orders,
+  user,
+  enterprise,
+  onBack,
+  onOpen,
+  onUpdate,
+}: {
+  orders: Order[]
+  user: User
+  enterprise: Enterprise | null
+  onBack: () => void
+  onOpen: (id: string) => void
+  onUpdate: (id: string, changes: Partial<Order>) => void
+}) {
+  const plantIds = new Set((user.plantIds || []).filter((id) => enterprise?.plants.some((p) => p.id === id && p.active)))
+  const queue = orders
+    .filter((order) => order.plantId && plantIds.has(order.plantId))
+    .filter((order) => ['Подтверждён', 'Запланирован', 'Производство', 'Погружен'].includes(order.status))
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
+
+  return (
+    <Page title="Производственная очередь" subtitle="Загрузка и отгрузка по назначенным заводам">
+      {queue.length === 0 ? (
+        <Empty text="В производственной очереди пока нет заказов." />
+      ) : (
+        <div style={styles.list}>
+          {queue.map((order) => (
+            <div key={order.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <strong>{order.id}</strong>
+                <StatusBadge status={order.status} />
+              </div>
+              <InfoRow title="Материал" value={`${order.grade}, ${order.volume} м³`} />
+              <InfoRow title="Время" value={`${order.date} • ${order.time}`} />
+              <InfoRow title="Адрес" value={order.address} />
+              <InfoRow title="Машина / водитель" value={order.driver || 'Не назначен'} />
+
+              {order.status === 'Подтверждён' || order.status === 'Запланирован' ? (
+                <button
+                  style={styles.primaryButton}
+                  onClick={() => onUpdate(order.id, { status: 'Производство' })}
+                >
+                  ▶️ Начать загрузку
+                </button>
+              ) : null}
+
+              <div style={styles.muted}>
+                Загрузка выполняется оператором завода.
+              </div>
+
+              <button style={styles.secondaryButton} onClick={() => onOpen(order.id)}>
+                Подробнее
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <BackButton onClick={onBack} text="Назад к заводу" />
+    </Page>
+  )
+}
+
+function Operator({
+  orders,
+  user,
+  enterprise,
+  onHome,
+  onOpen,
+  onUpdate,
+}: {
+  orders: Order[]
+  user: User
+  enterprise: Enterprise | null
+  onHome: () => void
+  onOpen: (id: string) => void
+  onUpdate: (id: string, changes: Partial<Order>) => void
+}) {
+  const plantIds = new Set(
+    (user.plantIds || []).filter((id) =>
+      enterprise?.plants.some((plant) => plant.id === id && plant.active),
+    ),
+  )
+
+  const queue = orders
+    .filter((order) => !!order.plantId && plantIds.has(order.plantId))
+    .filter((order) =>
+      ['Подтверждён', 'Запланирован', 'Производство'].includes(order.status),
+    )
+    .sort((a, b) =>
+      `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`),
+    )
+
+  const loaded = orders
+    .filter((order) => !!order.plantId && plantIds.has(order.plantId))
+    .filter((order) => order.status === 'Погружен')
+    .sort((a, b) =>
+      `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`),
+    )
+
+  const plantNames = Array.from(plantIds)
+    .map((id) => enterprise?.plants.find((plant) => plant.id === id)?.name)
+    .filter(Boolean)
+    .join(', ')
+
+  return (
+    <Page
+      title="Оператор завода"
+      subtitle={plantNames || 'Производственный объект не назначен'}
+    >
+      <div style={styles.stats}>
+        <Stat title="В очереди" value={queue.length} />
+        <Stat title="На загрузке" value={queue.filter((o) => o.status === 'Производство').length} />
+        <Stat title="Загружено" value={loaded.length} />
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ОЧЕРЕДЬ НА ЗАГРУЗКУ</div>
+        <p style={styles.muted}>
+          Здесь оператор видит только заказы своего завода. Начальник завода
+          заранее назначает объект и машину; оператор выполняет фактическую загрузку.
+        </p>
+
+        {queue.length === 0 ? (
+          <Empty text="Заказов на загрузку пока нет." />
+        ) : (
+          <div style={styles.list}>
+            {queue.map((order) => (
+              <div key={order.id} style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <div>
+                    <strong>{order.id}</strong>
+                    <div style={styles.muted}>
+                      {order.date} • {order.time}
+                    </div>
+                  </div>
+                  <StatusBadge status={order.status} />
+                </div>
+
+                <InfoRow title="Материал" value={`${order.grade}, ${order.volume} м³`} />
+                <InfoRow title="Заказчик / адрес" value={order.address} />
+                <InfoRow title="Машина / водитель" value={order.vehicleNumber ? `${order.vehicleNumber} • ${order.driver || "Водитель не назначен"}` : (order.driver || "Машина не назначена")} />
+
+                {order.status === 'Подтверждён' || order.status === 'Запланирован' ? (
+                  <button
+                    style={styles.primaryButton}
+                    onClick={() => onUpdate(order.id, { status: 'Производство' })}
+                  >
+                    ▶️ НАЧАТЬ ЗАГРУЗКУ
+                  </button>
+                ) : null}
+
+                {order.status === 'Производство' ? (
+                  <button
+                    style={styles.primaryButton}
+                    onClick={() => {
+                      onUpdate(order.id, {
+                        status: 'Погружен',
+                        loadedAt: new Date().toISOString(),
+                      })
+                      alert(`Заказ ${order.id} загружен. Начальник увидит факт загрузки, после чего водитель сможет выехать.`)
+                    }}
+                  >
+                    ✅ ЗАГРУЖЕНО
+                  </button>
+                ) : null}
+
+                <button
+                  style={styles.secondaryButton}
+                  onClick={() => onOpen(order.id)}
+                >
+                  Подробнее
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>УЖЕ ЗАГРУЖЕНЫ</div>
+        {loaded.length === 0 ? (
+          <Empty text="Сегодня загруженных заказов пока нет." />
+        ) : (
+          <div style={styles.list}>
+            {loaded.slice(0, 10).map((order) => (
+              <div key={order.id} style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <strong>{order.id}</strong>
+                  <StatusBadge status={order.status} />
+                </div>
+                <InfoRow title="Материал" value={`${order.grade}, ${order.volume} м³`} />
+                <InfoRow title="Машина / водитель" value={order.vehicleNumber ? `${order.vehicleNumber} • ${order.driver || "Водитель не назначен"}` : (order.driver || "Машина не назначена")} />
+                <InfoRow title="Адрес" value={order.address} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <BackButton onClick={onHome} text="На главную" />
+    </Page>
+  )
+}
+
+function Materials({
+  user,
+  enterprise,
+  onBack,
+}: {
+  user: User
+  enterprise: Enterprise | null
+  onBack: () => void
+}) {
+  const plantIds = (user.plantIds || []).filter((id) => enterprise?.plants.some((p) => p.id === id && p.active))
+  const storageKey = `siviotMaterials:${enterprise?.id || 'none'}:${plantIds[0] || 'none'}`
+  const [items, setItems] = useState<{ id: string; name: string; unit: string; balance: number }[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || 'null')
+      return Array.isArray(saved) ? saved : [
+        { id: 'cement', name: 'Цемент', unit: 'т', balance: 0 },
+        { id: 'sand', name: 'Песок', unit: 'т', balance: 0 },
+        { id: 'stone', name: 'Щебень', unit: 'т', balance: 0 },
+      ]
+    } catch {
+      return []
+    }
+  })
+  const [name, setName] = useState('')
+  const [unit, setUnit] = useState('т')
+  const [amount, setAmount] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem(storageKey, JSON.stringify(items))
+  }, [storageKey, items])
+
+  function addMaterial() {
+    if (!name.trim()) return
+    setItems((prev) => [...prev, { id: `m-${Date.now()}`, name: name.trim(), unit, balance: 0 }])
+    setName('')
+  }
+
+  function changeBalance(id: string, delta: number) {
+    setItems((prev) => prev.map((item) => item.id === id
+      ? { ...item, balance: Math.max(0, item.balance + delta) }
+      : item))
+  }
+
+  return (
+    <Page title="Склад материалов" subtitle="Остатки завода">
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ДОБАВИТЬ МАТЕРИАЛ</div>
+        <div style={styles.twoColumns}>
+          <label style={styles.label}>
+            Материал
+            <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Например: Добавка" />
+          </label>
+          <label style={styles.label}>
+            Единица
+            <select style={styles.input} value={unit} onChange={(e) => setUnit(e.target.value)}>
+              <option>т</option>
+              <option>кг</option>
+              <option>м³</option>
+              <option>л</option>
+            </select>
+          </label>
+        </div>
+        <button style={styles.primaryButton} onClick={addMaterial}>➕ Добавить материал</button>
+      </div>
+
+      <div style={styles.list}>
+        {items.map((item) => (
+          <div key={item.id} style={styles.card}>
+            <div style={styles.cardHeader}>
+              <strong>{item.name}</strong>
+              <span style={styles.badge}>{item.balance.toFixed(2)} {item.unit}</span>
+            </div>
+            <div style={styles.twoColumns}>
+              <label style={styles.label}>
+                Количество
+                <input style={styles.input} type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              </label>
+              <div>
+                <button style={styles.secondaryButton} onClick={() => changeBalance(item.id, Number(amount) || 0)}>➕ Приход</button>
+                <button style={styles.dangerButton} onClick={() => changeBalance(item.id, -(Number(amount) || 0))}>➖ Расход</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <BackButton onClick={onBack} text="Назад к заводу" />
+    </Page>
+  )
+}
+
+function Recipes({
+  user,
+  enterprise,
+  onBack,
+}: {
+  user: User
+  enterprise: Enterprise | null
+  onBack: () => void
+}) {
+  const plant = enterprise?.plants.find((p) => p.id === user.plantIds?.find((id) => p.id === id && p.active))
+  const [recipes, setRecipes] = useState<{ id: string; grade: string; name: string; notes: string }[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`siviotRecipes:${plant?.id || 'none'}`) || '[]')
+    } catch { return [] }
+  })
+  const [grade, setGrade] = useState('М300')
+  const [name, setName] = useState('')
+  const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem(`siviotRecipes:${plant?.id || 'none'}`, JSON.stringify(recipes))
+  }, [plant?.id, recipes])
+
+  function addRecipe() {
+    if (!name.trim()) return
+    setRecipes((prev) => [...prev, { id: `r-${Date.now()}`, grade, name: name.trim(), notes: notes.trim() }])
+    setName('')
+    setNotes('')
+  }
+
+  return (
+    <Page title="Рецептуры" subtitle={plant ? plant.name : 'Рецептуры бетона'}>
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>НОВАЯ РЕЦЕПТУРА</div>
+        <label style={styles.label}>
+          Марка
+          <select style={styles.input} value={grade} onChange={(e) => setGrade(e.target.value)}>
+            <option>М200</option><option>М250</option><option>М300</option><option>М350</option><option>М400</option>
+          </select>
+        </label>
+        <label style={styles.label}>
+          Название
+          <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Например: М300 стандарт" />
+        </label>
+        <label style={styles.label}>
+          Состав / примечание
+          <textarea style={{ ...styles.input, minHeight: 100 }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Цемент, песок, щебень, добавки..." />
+        </label>
+        <button style={styles.primaryButton} onClick={addRecipe}>➕ Сохранить рецептуру</button>
+      </div>
+
+      {recipes.length === 0 ? <Empty text="Рецептур пока нет." /> : (
+        <div style={styles.list}>
+          {recipes.map((recipe) => (
+            <div key={recipe.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <strong>{recipe.name}</strong>
+                <span style={styles.badge}>{recipe.grade}</span>
+              </div>
+              <p style={styles.muted}>{recipe.notes || 'Состав не указан.'}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <BackButton onClick={onBack} text="Назад к заводу" />
+    </Page>
+  )
+}
+
+function Vehicles({
+  user,
+  enterprise,
+  onBack,
+}: {
+  user: User
+  enterprise: Enterprise | null
+  onBack: () => void
+}) {
+  const plantIds = new Set(user.plantIds || [])
+  const drivers = enterprise
+    ? [] // водители будут подключены к этой сущности на следующем этапе
+    : []
+  const [vehicles, setVehicles] = useState<{ id: string; number: string; model: string; driver: string }[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`siviotVehicles:${enterprise?.id || 'none'}`) || '[]')
+    } catch { return [] }
+  })
+  const [number, setNumber] = useState('')
+  const [model, setModel] = useState('')
+  const [driver, setDriver] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem(`siviotVehicles:${enterprise?.id || 'none'}`, JSON.stringify(vehicles))
+  }, [enterprise?.id, vehicles])
+
+  function addVehicle() {
+    if (!number.trim()) return
+    setVehicles((prev) => [...prev, { id: `v-${Date.now()}`, number: number.trim(), model: model.trim(), driver: driver.trim() }])
+    setNumber('')
+    setModel('')
+    setDriver('')
+  }
+
+  return (
+    <Page title="Машины" subtitle="Транспорт и водители">
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ДОБАВИТЬ АВТОМОБИЛЬ</div>
+        <label style={styles.label}>
+          Госномер
+          <input style={styles.input} value={number} onChange={(e) => setNumber(e.target.value)} placeholder="А000АА 01" />
+        </label>
+        <label style={styles.label}>
+          Модель
+          <input style={styles.input} value={model} onChange={(e) => setModel(e.target.value)} placeholder="КАМАЗ" />
+        </label>
+        <label style={styles.label}>
+          Водитель
+          <input style={styles.input} value={driver} onChange={(e) => setDriver(e.target.value)} placeholder="ФИО водителя" />
+        </label>
+        <button style={styles.primaryButton} onClick={addVehicle}>➕ Добавить машину</button>
+      </div>
+
+      {vehicles.length === 0 ? <Empty text="Машины пока не добавлены." /> : (
+        <div style={styles.list}>
+          {vehicles.map((vehicle) => (
+            <div key={vehicle.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <strong>{vehicle.number}</strong>
+                <span style={styles.badge}>Активна</span>
+              </div>
+              <InfoRow title="Модель" value={vehicle.model || '—'} />
+              <InfoRow title="Водитель" value={vehicle.driver || 'Не назначен'} />
+            </div>
+          ))}
+        </div>
+      )}
+      <BackButton onClick={onBack} text="Назад к заводу" />
+    </Page>
+  )
+}
+
+function Reports({
+  orders,
+  user,
+  enterprise,
+  onBack,
+}: {
+  orders: Order[]
+  user: User
+  enterprise: Enterprise | null
+  onBack: () => void
+}) {
+  const plantIds = new Set((user.plantIds || []).filter((id) => enterprise?.plants.some((p) => p.id === id && p.active)))
+  const plantOrders = orders.filter((order) => !!order.plantId && plantIds.has(order.plantId))
+  const volume = plantOrders.reduce((sum, order) => sum + order.volume, 0)
+  const revenue = plantOrders.filter((o) => !['Отменён'].includes(o.status)).reduce((sum, order) => sum + order.total, 0)
+  const shipped = plantOrders.filter((o) => ['Погружен', 'В пути', 'Доставлен', 'Оплачен', 'Завершён'].includes(o.status))
+  const completed = plantOrders.filter((o) => ['Доставлен', 'Оплачен', 'Завершён'].includes(o.status))
+
+  return (
+    <Page title="Отчёты" subtitle="Сводка по назначенным заводам">
+      <div style={styles.stats}>
+        <Stat title="Заказов" value={plantOrders.length} />
+        <Stat title="Объём, м³" value={Number(volume.toFixed(1))} />
+        <Stat title="Отгружено" value={shipped.length} />
+        <Stat title="Завершено" value={completed.length} />
+      </div>
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ВЫРУЧКА</div>
+        <strong style={styles.total}>{revenue.toFixed(2)} €</strong>
+        <p style={styles.muted}>Расчёт по текущим карточкам заказов. Детальная финансовая аналитика будет расширена отдельно.</p>
+      </div>
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>СТАТУСЫ</div>
+        {(['Новый','Подтверждён','Запланирован','Производство','Погружен','В пути','Доставлен','Оплачен','Завершён','Отменён'] as Status[]).map((status) => {
+          const count = plantOrders.filter((o) => o.status === status).length
+          return <InfoRow key={status} title={status} value={String(count)} />
+        })}
+      </div>
+      <BackButton onClick={onBack} text="Назад к заводу" />
+    </Page>
+  )
+}
 
 function Driver({
   orders,
@@ -1325,20 +2538,41 @@ function Driver({
                 value={`${order.grade}, ${order.volume} м³`}
               />
 
+              <InfoRow
+                title="Машина"
+                value={order.vehicleNumber || 'Не назначена'}
+              />
+
+              {order.loadedAt && (
+                <InfoRow title="Загружен" value={new Date(order.loadedAt).toLocaleString('ru-RU')} />
+              )}
+              {order.departedAt && (
+                <InfoRow title="Выехал" value={new Date(order.departedAt).toLocaleString('ru-RU')} />
+              )}
+              {order.arrivedAt && (
+                <InfoRow title="Прибыл" value={new Date(order.arrivedAt).toLocaleString('ru-RU')} />
+              )}
+              {order.unloadedAt && (
+                <InfoRow title="Разгрузил" value={new Date(order.unloadedAt).toLocaleString('ru-RU')} />
+              )}
+              {order.returnedAt && (
+                <InfoRow title="Вернулся" value={new Date(order.returnedAt).toLocaleString('ru-RU')} />
+              )}
+
               <div style={styles.driverButtons}>
-                {order.status === 'Подтверждён' ||
-                order.status === 'Запланирован' ? (
+                {order.status === 'Погружен' && (
                   <button
                     style={styles.primaryButton}
                     onClick={() =>
                       onUpdate(order.id, {
                         status: 'В пути',
+                        departedAt: new Date().toISOString(),
                       })
                     }
                   >
-                    🚚 Начать доставку
+                    🚚 ВЫЕХАЛ
                   </button>
-                ) : null}
+                )}
 
                 {order.status === 'В пути' && (
                   <button
@@ -1346,10 +2580,39 @@ function Driver({
                     onClick={() =>
                       onUpdate(order.id, {
                         status: 'Доставлен',
+                        arrivedAt: new Date().toISOString(),
                       })
                     }
                   >
-                    ✅ Доставлено
+                    📍 ПРИБЫЛ
+                  </button>
+                )}
+
+                {order.status === 'Доставлен' && (
+                  <button
+                    style={styles.primaryButton}
+                    onClick={() =>
+                      onUpdate(order.id, {
+                        status: 'Доставлен',
+                        unloadedAt: new Date().toISOString(),
+                      })
+                    }
+                  >
+                    🏗️ РАЗГРУЗИЛ
+                  </button>
+                )}
+
+                {order.status === 'Доставлен' && order.unloadedAt && (
+                  <button
+                    style={styles.primaryButton}
+                    onClick={() =>
+                      onUpdate(order.id, {
+                        status: 'Завершён',
+                        returnedAt: new Date().toISOString(),
+                      })
+                    }
+                  >
+                    🔄 ВЕРНУЛСЯ
                   </button>
                 )}
 
@@ -1399,23 +2662,77 @@ function DriverOrderDetail({
         <InfoRow title="Время" value={order.time} />
         <InfoRow title="Телефон" value={order.phone} />
         <InfoRow title="Комментарий" value={order.comment || '—'} />
+        <InfoRow title="Машина" value={order.vehicleNumber || 'Не назначена'} />
+        {order.loadedAt && (
+          <InfoRow title="Загружен" value={new Date(order.loadedAt).toLocaleString('ru-RU')} />
+        )}
+        {order.departedAt && (
+          <InfoRow title="Выехал" value={new Date(order.departedAt).toLocaleString('ru-RU')} />
+        )}
+        {order.arrivedAt && (
+          <InfoRow title="Прибыл" value={new Date(order.arrivedAt).toLocaleString('ru-RU')} />
+        )}
+        {order.unloadedAt && (
+          <InfoRow title="Разгрузил" value={new Date(order.unloadedAt).toLocaleString('ru-RU')} />
+        )}
+        {order.returnedAt && (
+          <InfoRow title="Вернулся" value={new Date(order.returnedAt).toLocaleString('ru-RU')} />
+        )}
       </div>
 
-      {order.status === 'Подтверждён' || order.status === 'Запланирован' ? (
+      {order.status === 'Погружен' && (
         <button
           style={styles.primaryButton}
-          onClick={() => onUpdate(order.id, { status: 'В пути' })}
+          onClick={() =>
+            onUpdate(order.id, {
+              status: 'В пути',
+              departedAt: new Date().toISOString(),
+            })
+          }
         >
-          Начать доставку
+          🚚 ВЫЕХАЛ
         </button>
-      ) : null}
+      )}
 
       {order.status === 'В пути' && (
         <button
           style={styles.primaryButton}
-          onClick={() => onUpdate(order.id, { status: 'Доставлен' })}
+          onClick={() =>
+            onUpdate(order.id, {
+              status: 'Доставлен',
+              arrivedAt: new Date().toISOString(),
+            })
+          }
         >
-          Отметить доставленным
+          📍 ПРИБЫЛ
+        </button>
+      )}
+
+      {order.status === 'Доставлен' && (
+        <button
+          style={styles.primaryButton}
+          onClick={() =>
+            onUpdate(order.id, {
+              status: 'Оплачен',
+              unloadedAt: new Date().toISOString(),
+            })
+          }
+        >
+          🏗️ РАЗГРУЗИЛ
+        </button>
+      )}
+
+      {order.status === 'Доставлен' && order.unloadedAt && (
+        <button
+          style={styles.primaryButton}
+          onClick={() =>
+            onUpdate(order.id, {
+              status: 'Завершён',
+              returnedAt: new Date().toISOString(),
+            })
+          }
+        >
+          🔄 ВЕРНУЛСЯ
         </button>
       )}
 
@@ -1662,6 +2979,571 @@ function Login({
   )
 }
 
+
+/* =========================
+   PLATFORM ADMIN
+========================= */
+
+function PlatformAdmin({
+  enterprises,
+  users,
+  onAddEnterprise,
+  onUpdateEnterprise,
+  onManageEnterprise,
+  onLogout,
+}: {
+  enterprises: Enterprise[]
+  users: User[]
+  onAddEnterprise: (enterprise: Enterprise) => void
+  onUpdateEnterprise: (id: string, changes: Partial<Enterprise>) => void
+  onManageEnterprise: (id: string) => void
+  onLogout: () => void
+}) {
+  const [showForm, setShowForm] = useState(false)
+  const [name, setName] = useState('')
+  const [shortName, setShortName] = useState('')
+  const [logoUrl, setLogoUrl] = useState('')
+
+  function createEnterprise() {
+    if (!name.trim() || !shortName.trim()) {
+      alert('Укажите полное и короткое название предприятия')
+      return
+    }
+
+    const id = `ent-${Date.now()}`
+    onAddEnterprise({
+      id,
+      name: name.trim(),
+      shortName: shortName.trim(),
+      logoUrl: logoUrl.trim(),
+      active: true,
+      createdAt: new Date().toISOString(),
+      plants: [],
+    })
+    setName('')
+    setShortName('')
+    setLogoUrl('')
+    setShowForm(false)
+    alert('Предприятие создано')
+  }
+
+  const activeCount = enterprises.filter((item) => item.active).length
+  const blockedCount = enterprises.length - activeCount
+  const activeConcretePlants = enterprises.reduce(
+    (sum, enterprise) =>
+      sum +
+      enterprise.plants.filter(
+        (plant) => plant.active && plant.type === 'concrete',
+      ).length,
+    0,
+  )
+  const activeAsphaltPlants = enterprises.reduce(
+    (sum, enterprise) =>
+      sum +
+      enterprise.plants.filter(
+        (plant) => plant.active && plant.type === 'asphalt',
+      ).length,
+    0,
+  )
+
+  return (
+    <Page title="Центральная администрация SIVIOT" subtitle="Предприятия, заводы и доступ">
+      <div style={styles.stats}>
+        <Stat title="Всего предприятий" value={enterprises.length} />
+        <Stat title="Активных" value={activeCount} />
+        <Stat title="Заблокированных" value={blockedCount} />
+        <Stat title="Бетонных заводов" value={activeConcretePlants} />
+        <Stat title="Асфальтных заводов" value={activeAsphaltPlants} />
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ЦЕНТРАЛЬНОЕ УПРАВЛЕНИЕ</div>
+        <h2 style={{ margin: '7px 0 8px' }}>Предприятия SIVIOT</h2>
+        <p style={styles.muted}>
+          Здесь находится только административная информация. Заказы, производство,
+          склады и финансовая операционка предприятий сюда не выводятся.
+        </p>
+        <button style={styles.primaryButton} onClick={() => setShowForm((value) => !value)}>
+          ➕ Добавить предприятие
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={styles.card}>
+          <h3 style={{ marginTop: 0 }}>Новое предприятие</h3>
+          <label style={styles.label}>
+            Полное название
+            <input
+              style={styles.input}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Например: ООО «Бетон-Сервис»"
+            />
+          </label>
+          <label style={styles.label}>
+            Короткое название
+            <input
+              style={styles.input}
+              value={shortName}
+              onChange={(e) => setShortName(e.target.value)}
+              placeholder="Например: Бетон-Сервис"
+            />
+          </label>
+          <label style={styles.label}>
+            Логотип предприятия — URL
+            <input
+              style={styles.input}
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://..."
+            />
+          </label>
+          <button style={styles.primaryButton} onClick={createEnterprise}>
+            Создать предприятие
+          </button>
+          <button style={styles.secondaryButton} onClick={() => setShowForm(false)}>
+            Отмена
+          </button>
+        </div>
+      )}
+
+      <div style={styles.list}>
+        {enterprises.map((enterprise) => {
+          const enterpriseUsers = users.filter((user) => user.enterpriseId === enterprise.id)
+          return (
+            <div key={enterprise.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {enterprise.logoUrl ? (
+                    <img
+                      src={enterprise.logoUrl}
+                      alt=""
+                      style={{ width: 48, height: 48, objectFit: 'contain', borderRadius: 12 }}
+                    />
+                  ) : (
+                    <div style={styles.bigIcon}>🏢</div>
+                  )}
+                  <div>
+                    <strong>{enterprise.name}</strong>
+                    <div style={styles.muted}>{enterprise.shortName}</div>
+                  </div>
+                </div>
+                <span style={styles.badge}>
+                  {enterprise.active ? 'Активно' : 'Заблокировано'}
+                </span>
+              </div>
+
+              <InfoRow
+                title="Заводы"
+                value={`${enterprise.plants.filter((plant) => plant.active).length} активных / ${enterprise.plants.length} всего`}
+              />
+              <InfoRow title="Пользователи" value={String(enterpriseUsers.length)} />
+              <button
+                style={styles.primaryButton}
+                onClick={() => onManageEnterprise(enterprise.id)}
+              >
+                ⚙️ Управление предприятием
+              </button>
+
+              <button
+                style={enterprise.active ? styles.dangerButton : styles.secondaryButton}
+                onClick={() =>
+                  onUpdateEnterprise(enterprise.id, { active: !enterprise.active })
+                }
+              >
+                {enterprise.active ? '⛔ Заблокировать предприятие' : '✅ Разблокировать предприятие'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      <button style={styles.dangerButton} onClick={onLogout}>
+        🚪 Выйти из центральной администрации
+      </button>
+    </Page>
+  )
+}
+
+/* =========================
+   ENTERPRISE ADMIN
+========================= */
+
+function EnterpriseAdmin({
+  enterprise,
+  users,
+  onBack,
+  onUpdateEnterprise,
+  onAddUser,
+  onUpdateUser,
+  onDeleteUser,
+}: {
+  enterprise: Enterprise
+  users: User[]
+  onBack: () => void
+  onUpdateEnterprise: (changes: Partial<Enterprise>) => void
+  onAddUser: (user: User) => void
+  onUpdateUser: (id: string, changes: Partial<User>) => void
+  onDeleteUser: (id: string) => void
+}) {
+  const [newName, setNewName] = useState('')
+  const [newLogin, setNewLogin] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState<Role>('manager')
+  const [newPlantIds, setNewPlantIds] = useState<string[]>([])
+
+  function addUser() {
+    if (!newName.trim() || !newLogin.trim() || !newPassword) {
+      alert('Заполните имя, логин и пароль')
+      return
+    }
+    if (users.some((user) => user.login === newLogin.trim())) {
+      alert('Такой логин уже существует в предприятии')
+      return
+    }
+
+    onAddUser({
+      id: `u-${Date.now()}`,
+      name: newName.trim(),
+      login: newLogin.trim(),
+      password: newPassword,
+      role: newRole,
+      enterpriseId: enterprise.id,
+      plantIds: newRole === 'manager' || newRole === 'admin' ? [...newPlantIds] : [...newPlantIds],
+      active: true,
+    })
+
+    setNewName('')
+    setNewLogin('')
+    setNewPassword('')
+    setNewRole('manager')
+    setNewPlantIds([])
+    alert('Пользователь создан')
+  }
+
+  function togglePlant(id: string) {
+    setNewPlantIds((prev) =>
+      prev.includes(id) ? prev.filter((plantId) => plantId !== id) : [...prev, id],
+    )
+  }
+
+  const [newPlantName, setNewPlantName] = useState('')
+  const [newPlantCity, setNewPlantCity] = useState('')
+  const [newPlantType, setNewPlantType] = useState<PlantType>('concrete')
+
+  function addPlant() {
+    if (!newPlantName.trim()) {
+      alert('Укажите название завода')
+      return
+    }
+
+    const plant: Plant = {
+      id: `plant-${Date.now()}`,
+      name: newPlantName.trim(),
+      type: newPlantType,
+      city: newPlantCity.trim(),
+      active: true,
+    }
+
+    onUpdateEnterprise({ plants: [...enterprise.plants, plant] })
+    setNewPlantName('')
+    setNewPlantCity('')
+    setNewPlantType('concrete')
+  }
+
+  function removePlant(id: string) {
+    const plant = enterprise.plants.find((item) => item.id === id)
+    if (!plant) return
+
+    if (
+      !confirm(
+        `Удалить завод «${plant.name}»? Это действие уберёт его из предприятия. Историю заказов лучше сохранять, поэтому для временной остановки используйте «Приостановить».`,
+      )
+    ) {
+      return
+    }
+
+    onUpdateEnterprise({
+      plants: enterprise.plants.filter((item) => item.id !== id),
+    })
+  }
+
+  return (
+    <Page title={enterprise.name} subtitle="Администрирование предприятия">
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ДАННЫЕ ПРЕДПРИЯТИЯ</div>
+        <label style={styles.label}>
+          Полное название
+          <input
+            style={styles.input}
+            value={enterprise.name}
+            onChange={(e) => onUpdateEnterprise({ name: e.target.value })}
+          />
+        </label>
+        <label style={styles.label}>
+          Короткое название
+          <input
+            style={styles.input}
+            value={enterprise.shortName}
+            onChange={(e) => onUpdateEnterprise({ shortName: e.target.value })}
+          />
+        </label>
+        <label style={styles.label}>
+          Логотип — URL
+          <input
+            style={styles.input}
+            value={enterprise.logoUrl}
+            onChange={(e) => onUpdateEnterprise({ logoUrl: e.target.value })}
+            placeholder="https://..."
+          />
+        </label>
+        <p style={styles.muted}>
+          Подписка и её стоимость в SIVIOT не отображаются. Центральный администратор
+          управляет только подключением предприятия и отдельных заводов.
+        </p>
+        <button
+          style={enterprise.active ? styles.dangerButton : styles.primaryButton}
+          onClick={() => onUpdateEnterprise({ active: !enterprise.active })}
+        >
+          {enterprise.active ? '⛔ Заблокировать предприятие' : '✅ Разблокировать предприятие'}
+        </button>
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ОБЪЕКТЫ / ЗАВОДЫ</div>
+        <p style={styles.muted}>
+          Центральный администратор определяет, какие производственные объекты существуют
+          у предприятия и к каким из них привязываются сотрудники.
+        </p>
+
+        {enterprise.plants.length === 0 ? (
+          <Empty text="Заводов пока нет." />
+        ) : (
+          <div style={styles.list}>
+            {enterprise.plants.map((plant) => (
+              <div key={plant.id} style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <div>
+                    <strong>{plant.name}</strong>
+                    <div style={styles.muted}>
+                      {plant.city || 'Город не указан'} •{' '}
+                      {plant.type === 'concrete' ? 'Бетонный завод' : 'Асфальтный завод'}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      ...styles.badge,
+                      ...(plant.active
+                        ? { background: '#dcfce7', color: '#166534' }
+                        : { background: '#e5e7eb', color: '#475569' }),
+                    }}
+                  >
+                    {plant.active ? 'Активен' : 'Приостановлен'}
+                  </span>
+                </div>
+
+                <div style={styles.muted}>
+                  {plant.active
+                    ? 'Учитывается как подключённый завод.'
+                    : 'Временно отключён: не участвует в текущем подключении, данные сохранены.'}
+                </div>
+
+                <div style={styles.twoColumns}>
+                  <button
+                    style={plant.active ? styles.dangerButton : styles.primaryButton}
+                    onClick={() =>
+                      onUpdateEnterprise({
+                        plants: enterprise.plants.map((item) =>
+                          item.id === plant.id ? { ...item, active: !item.active } : item,
+                        ),
+                      })
+                    }
+                  >
+                    {plant.active ? '⏸ Приостановить' : '▶ Включить'}
+                  </button>
+
+                  <button
+                    style={styles.secondaryButton}
+                    onClick={() => removePlant(plant.id)}
+                  >
+                    🗑 Удалить
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ ...styles.card, background: '#f8fafc' }}>
+          <h3 style={{ marginTop: 0 }}>Добавить завод</h3>
+          <label style={styles.label}>
+            Название завода
+            <input
+              style={styles.input}
+              value={newPlantName}
+              onChange={(e) => setNewPlantName(e.target.value)}
+              placeholder="Например: Майкоп — бетон"
+            />
+          </label>
+
+          <label style={styles.label}>
+            Город / населённый пункт
+            <input
+              style={styles.input}
+              value={newPlantCity}
+              onChange={(e) => setNewPlantCity(e.target.value)}
+              placeholder="Майкоп"
+            />
+          </label>
+
+          <label style={styles.label}>
+            Тип завода
+            <select
+              style={styles.input}
+              value={newPlantType}
+              onChange={(e) => setNewPlantType(e.target.value as PlantType)}
+            >
+              <option value="concrete">Бетонный</option>
+              <option value="asphalt">Асфальтный</option>
+            </select>
+          </label>
+
+          <button style={styles.primaryButton} onClick={addPlant}>
+            ➕ Подключить завод
+          </button>
+        </div>
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.sectionLabel}>ПОЛЬЗОВАТЕЛИ</div>
+        <h3 style={{ marginTop: 6 }}>Добавить сотрудника</h3>
+
+        <label style={styles.label}>
+          Имя
+          <input
+            style={styles.input}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Иван Петров"
+          />
+        </label>
+        <label style={styles.label}>
+          Логин
+          <input
+            style={styles.input}
+            value={newLogin}
+            onChange={(e) => setNewLogin(e.target.value)}
+            placeholder="login"
+          />
+        </label>
+        <label style={styles.label}>
+          Пароль
+          <input
+            style={styles.input}
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Пароль"
+          />
+        </label>
+        <label style={styles.label}>
+          Роль
+          <select
+            style={styles.input}
+            value={newRole}
+            onChange={(e) => setNewRole(e.target.value as Role)}
+          >
+            <option value="manager">Руководитель</option>
+            <option value="plantBoss">Начальник завода</option>
+            <option value="admin">Администратор предприятия</option>
+            <option value="operator">Оператор</option>
+            <option value="driver">Водитель</option>
+            <option value="client">Клиент</option>
+          </select>
+        </label>
+
+        <div style={styles.plantSelector}>
+          <div style={styles.muted}>Привязать к объектам:</div>
+          {enterprise.plants.map((plant) => (
+            <label key={plant.id} style={styles.checkRow}>
+              <input
+                type="checkbox"
+                checked={newPlantIds.includes(plant.id)}
+                onChange={() => togglePlant(plant.id)}
+              />
+              <span>{plant.name}</span>
+            </label>
+          ))}
+        </div>
+
+        <button style={styles.primaryButton} onClick={addUser}>
+          ➕ Создать пользователя
+        </button>
+      </div>
+
+      <div style={styles.list}>
+        {users.map((user) => (
+          <div key={user.id} style={styles.card}>
+            <div style={styles.cardHeader}>
+              <div>
+                <strong>{user.name}</strong>
+                <div style={styles.muted}>{user.login}</div>
+              </div>
+              <span style={styles.badge}>{roleName(user.role)}</span>
+            </div>
+
+            <InfoRow
+              title="Объекты"
+              value={
+                user.plantIds?.length
+                  ? user.plantIds
+                      .map((id) => enterprise.plants.find((plant) => plant.id === id)?.name || id)
+                      .join(', ')
+                  : 'Не назначены'
+              }
+            />
+
+            <label style={styles.label}>
+              Роль
+              <select
+                style={styles.input}
+                value={user.role}
+                onChange={(e) => onUpdateUser(user.id, { role: e.target.value as Role })}
+              >
+                <option value="manager">Руководитель</option>
+                <option value="admin">Администратор предприятия</option>
+                <option value="operator">Оператор</option>
+                <option value="driver">Водитель</option>
+                <option value="client">Клиент</option>
+              </select>
+            </label>
+
+            <button
+              style={user.active === false ? styles.primaryButton : styles.secondaryButton}
+              onClick={() => onUpdateUser(user.id, { active: user.active === false })}
+            >
+              {user.active === false ? 'Разрешить вход' : 'Запретить вход'}
+            </button>
+
+            <button
+              style={styles.dangerButton}
+              onClick={() => {
+                if (confirm(`Удалить пользователя «${user.name}»?`)) {
+                  onDeleteUser(user.id)
+                }
+              }}
+            >
+              🗑️ Удалить пользователя
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <BackButton onClick={onBack} text="Назад к предприятиям" />
+    </Page>
+  )
+}
+
 /* =========================
    ADMIN USERS
 ========================= */
@@ -1782,9 +3664,10 @@ function AdminUsers({
             onChange={(e) => setNewRole(e.target.value as Role)}
           >
             <option value="client">Клиент</option>
-            <option value="manager">Руководство</option>
+            <option value="manager">Руководитель</option>
+            <option value="operator">Оператор</option>
             <option value="driver">Водитель</option>
-            <option value="admin">Администратор</option>
+            <option value="admin">Администратор предприятия</option>
           </select>
         </label>
 
@@ -1924,29 +3807,6 @@ function Page({
   )
 }
 
-function IconGlyph({ icon }: { icon: string }) {
-  const common = {
-    width: 25,
-    height: 25,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.9,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    'aria-hidden': true,
-  }
-
-  if (icon === '👤') return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 19c.8-3.2 3-4.8 6.5-4.8s5.7 1.6 6.5 4.8" /></svg>
-  if (icon === '🏭') return <svg {...common}><path d="M4 20V9l6 3V9l5 3V7l5 3v10" /><path d="M4 20h17M8 16v4M12 16v4M16 16v4" /></svg>
-  if (icon === '🚚') return <svg {...common}><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z" /><circle cx="7" cy="18" r="2" /><circle cx="18" cy="18" r="2" /></svg>
-  if (icon === '⚙️') return <svg {...common}><path d="M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6Z" /><path d="m19.2 13.4 1.3 1-.9 1.7-1.6-.3a7.7 7.7 0 0 1-1.4 1.4l.3 1.6-1.7.9-1-1.3a7.5 7.5 0 0 1-2 .2l-1 1.3-1.7-.9.3-1.6a7.7 7.7 0 0 1-1.4-1.4l-1.6.3-.9-1.7 1.3-1a7.5 7.5 0 0 1 0-2l-1.3-1 .9-1.7 1.6.3A7.7 7.7 0 0 1 9 7.6L8.7 6l1.7-.9 1 1.3a7.5 7.5 0 0 1 2 0l1-1.3 1.7.9-.3 1.6a7.7 7.7 0 0 1 1.4 1.4l1.6-.3.9 1.7-1.3 1a7.5 7.5 0 0 1 0 2Z" /></svg>
-  if (icon === '👥') return <svg {...common}><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3.5 19c.7-3.2 2.6-4.8 5.5-4.8s4.8 1.6 5.5 4.8M15 14.5c2.8.1 4.5 1.5 5 4.5" /></svg>
-  if (icon === '➕') return <svg {...common}><circle cx="12" cy="12" r="8.5" /><path d="M12 8v8M8 12h8" /></svg>
-  if (icon === '📋') return <svg {...common}><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5V3h6v1.5M8.5 9h7M8.5 13h7M8.5 17h4" /></svg>
-  return <svg {...common}><circle cx="12" cy="12" r="8.5" /></svg>
-}
-
 function BigButton({
   icon,
   title,
@@ -1962,22 +3822,10 @@ function BigButton({
     <button
       style={styles.bigButton}
       onClick={onClick}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)'
-        e.currentTarget.style.boxShadow = '0 16px 34px rgba(15,23,42,0.10)'
-        e.currentTarget.style.borderColor = '#bfdbfe'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = '0 10px 28px rgba(15,23,42,0.06)'
-        e.currentTarget.style.borderColor = '#dbe5ef'
-      }}
     >
-      <span style={styles.bigIcon}>
-        <IconGlyph icon={icon} />
-      </span>
+      <span style={styles.bigIcon}>{icon}</span>
 
-      <span style={{ flex: 1 }}>
+      <span>
         <strong style={styles.bigTitle}>
           {title}
         </strong>
@@ -1986,8 +3834,6 @@ function BigButton({
           {subtitle}
         </small>
       </span>
-
-      <span style={styles.cardArrow}>→</span>
     </button>
   )
 }
@@ -2092,13 +3938,10 @@ function Stat({
   title: string
   value: number
 }) {
-  const icon = title === 'Всего' ? '◉' : title === 'Активных' ? '↗' : '✦'
-
   return (
     <div style={styles.stat}>
-      <div style={styles.statIcon}>{icon}</div>
-      <strong style={styles.statValue}>{value}</strong>
-      <span style={styles.statTitle}>{title}</span>
+      <strong>{value}</strong>
+      <span>{title}</span>
     </div>
   )
 }
@@ -2352,7 +4195,7 @@ const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: '100vh',
     background:
-      'radial-gradient(circle at 8% 4%, rgba(37,99,235,0.10), transparent 24%), radial-gradient(circle at 92% 10%, rgba(14,165,233,0.08), transparent 22%), linear-gradient(180deg, #eef4f8 0%, #f8fafc 46%, #edf3f8 100%)',
+      'linear-gradient(180deg, #eef4f8 0%, #f7fafc 42%, #eef3f7 100%)',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
     color: '#0f172a',
     padding: '24px 18px 36px',
@@ -2369,7 +4212,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
     background:
-      'radial-gradient(circle at 88% 10%, rgba(56,189,248,0.22), transparent 24%), linear-gradient(135deg, #071426 0%, #102c55 58%, #1d4ed8 150%)',
+      'linear-gradient(135deg, #08152b 0%, #12325f 58%, #1d4ed8 150%)',
     color: 'white',
     borderRadius: 26,
     padding: '27px 28px',
@@ -2394,8 +4237,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   hero: {
-    position: 'relative',
-    overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
     gap: 16,
@@ -2436,16 +4277,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#0f172a',
   },
 
-  heroGlow: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: '50%',
-    right: -70,
-    top: -90,
-    background: 'rgba(37,99,235,0.10)',
-  },
-
   logo: {
     fontSize: 90,
     textAlign: 'center',
@@ -2459,10 +4290,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   bigButton: {
-    position: 'relative',
-    overflow: 'hidden',
-    border: '1px solid #dbe5ef',
-    background: 'linear-gradient(145deg, rgba(255,255,255,0.99), rgba(248,251,255,0.97))',
+    border: '1px solid #e2e8f0',
+    background: 'rgba(255,255,255,0.96)',
     borderRadius: 22,
     padding: 22,
     display: 'flex',
@@ -2472,7 +4301,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'left',
     boxShadow: '0 10px 28px rgba(15,23,42,0.06)',
     minHeight: 122,
-    transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   },
 
   bigIcon: {
@@ -2483,23 +4312,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 17,
-    background: 'linear-gradient(145deg, #eff6ff, #dbeafe)',
-    color: '#1d4ed8',
+    background: '#eff6ff',
     fontSize: 29,
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.8), 0 8px 18px rgba(37,99,235,0.12)',
-  },
-
-  cardArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#f1f5f9',
-    color: '#64748b',
-    fontSize: 18,
-    fontWeight: 800,
   },
 
   bigTitle: {
@@ -2517,10 +4331,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   form: {
-    background: 'linear-gradient(145deg, rgba(255,255,255,0.99), rgba(248,251,255,0.98))',
+    background: 'rgba(255,255,255,0.96)',
     padding: 24,
-    borderRadius: 26,
-    border: '1px solid #dbe5ef',
+    borderRadius: 24,
+    border: '1px solid #e2e8f0',
     boxShadow: '0 12px 30px rgba(15,23,42,0.06)',
   },
 
@@ -2545,7 +4359,7 @@ const styles: Record<string, React.CSSProperties> = {
     WebkitTextFillColor: '#0f172a',
     outline: 'none',
     fontFamily: 'Inter, Arial, Helvetica, sans-serif',
-    boxShadow: '0 2px 5px rgba(15,23,42,0.03), inset 0 1px 2px rgba(15,23,42,0.03)',
+    boxShadow: 'inset 0 1px 2px rgba(15,23,42,0.03)',
   },
 
   twoColumns: {
@@ -2561,6 +4375,14 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 15,
     fontWeight: 700,
     color: '#334155',
+  },
+
+  plantSelector: {
+    background: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
   },
 
   priceBox: {
@@ -2605,8 +4427,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     marginTop: 10,
     marginBottom: 10,
-    boxShadow: '0 12px 24px rgba(37,99,235,0.22)',
-    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+    boxShadow: '0 10px 20px rgba(37,99,235,0.20)',
   },
 
   secondaryButton: {
@@ -2637,7 +4458,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   card: {
-    background: 'linear-gradient(145deg, rgba(255,255,255,0.99), rgba(248,251,255,0.97))',
+    background: 'rgba(255,255,255,0.96)',
     border: '1px solid #e2e8f0',
     borderRadius: 22,
     padding: 22,
@@ -2677,7 +4498,7 @@ const styles: Record<string, React.CSSProperties> = {
 
   orderCard: {
     width: '100%',
-    background: 'linear-gradient(145deg, rgba(255,255,255,0.99), rgba(249,251,255,0.98))',
+    background: 'rgba(255,255,255,0.97)',
     border: '1px solid #e2e8f0',
     borderRadius: 19,
     padding: 18,
@@ -2738,42 +4559,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   stat: {
-    position: 'relative',
-    overflow: 'hidden',
-    background: 'linear-gradient(145deg, rgba(255,255,255,0.99), rgba(247,250,255,0.97))',
+    background: 'rgba(255,255,255,0.97)',
     border: '1px solid #e2e8f0',
     borderRadius: 18,
     padding: 18,
-    textAlign: 'left',
-    boxShadow: '0 9px 25px rgba(15,23,42,0.055)',
-  },
-
-  statIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#eff6ff',
-    color: '#2563eb',
-    fontWeight: 900,
-    marginBottom: 12,
-  },
-
-  statValue: {
-    display: 'block',
-    fontSize: 30,
-    lineHeight: 1,
-    letterSpacing: -1,
-    color: '#0f172a',
-    marginBottom: 7,
-  },
-
-  statTitle: {
-    color: '#64748b',
-    fontSize: 13,
-    fontWeight: 700,
+    textAlign: 'center',
+    boxShadow: '0 7px 22px rgba(15,23,42,0.045)',
   },
 
   statusButtons: {
@@ -2788,11 +4579,10 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'white',
     color: '#334155',
     padding: '9px 12px',
-    borderRadius: 999,
+    borderRadius: 10,
     cursor: 'pointer',
-    fontWeight: 750,
+    fontWeight: 700,
     fontSize: 13,
-    transition: 'all 0.15s ease',
   },
 
   statusButtonActive: {
@@ -2803,6 +4593,16 @@ const styles: Record<string, React.CSSProperties> = {
 
   driverButtons: {
     marginTop: 15,
+  },
+
+  successBox: {
+    background: '#ecfdf5',
+    border: '1px solid #a7f3d0',
+    color: '#065f46',
+    borderRadius: 14,
+    padding: 14,
+    fontWeight: 750,
+    marginBottom: 12,
   },
 
   empty: {
