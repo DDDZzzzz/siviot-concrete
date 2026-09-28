@@ -1,4 +1,4 @@
-mport { createContext, useContext, useEffect, useMemo, useState } from 'react'
+﻿import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 type Status =
   | 'Новый'
@@ -617,7 +617,6 @@ function App() {
           settings={settings}
           concretePrice={concretePrice}
           concreteTotal={concreteTotal}
-          surchargeTotal={surchargeTotal}
           orderTotal={orderTotal}
           updateForm={updateForm}
           onBack={() => setPage('client')}
@@ -629,7 +628,6 @@ function App() {
         <Review
           form={form}
           concreteTotal={concreteTotal}
-          surchargeTotal={surchargeTotal}
           orderTotal={orderTotal}
           settings={settings}
           onBack={() => setPage('order')}
@@ -762,7 +760,6 @@ function App() {
 
       {page === 'vehicles' && currentUser.role === 'plantBoss' && (
         <Vehicles
-          user={currentUser}
           enterprise={
             currentUser.enterpriseId
               ? enterprises.find((item) => item.id === currentUser.enterpriseId) || null
@@ -991,7 +988,6 @@ function OrderForm({
   form,
   settings,
   concreteTotal,
-  surchargeTotal,
   orderTotal,
   updateForm,
   onBack,
@@ -1001,7 +997,6 @@ function OrderForm({
   settings: Settings
   concretePrice: number
   concreteTotal: number
-  surchargeTotal: number
   orderTotal: number
   updateForm: (
     field: keyof typeof defaultOrder,
@@ -1010,6 +1005,10 @@ function OrderForm({
   onBack: () => void
   onReview: () => void
 }) {
+  const surchargeTotal =
+    (form.urgent ? settings.urgentPrice : 0) +
+    (form.weekend ? settings.weekendPrice : 0)
+
   const canContinue =
     form.grade &&
     Number(form.volume) > 0 &&
@@ -1202,7 +1201,6 @@ function OrderForm({
 function Review({
   form,
   concreteTotal,
-  surchargeTotal,
   orderTotal,
   settings,
   onBack,
@@ -1210,7 +1208,6 @@ function Review({
 }: {
   form: typeof defaultOrder
   concreteTotal: number
-  surchargeTotal: number
   orderTotal: number
   settings: Settings
   onBack: () => void
@@ -2217,7 +2214,7 @@ function Materials({
   enterprise: Enterprise | null
   onBack: () => void
 }) {
-  const plantIds = (user.plantIds || []).filter((id) => enterprise?.plants.some((p) => p.id === id && p.active))
+  const plantIds = (user.plantIds || []).filter((id: string) => enterprise?.plants.some((p) => p.id === id && p.active))
   const storageKey = `siviotMaterials:${enterprise?.id || 'none'}:${plantIds[0] || 'none'}`
   const [items, setItems] = useState<{ id: string; name: string; unit: string; balance: number }[]>(() => {
     try {
@@ -2308,7 +2305,7 @@ function Recipes({
   enterprise: Enterprise | null
   onBack: () => void
 }) {
-  const plant = enterprise?.plants.find((p) => p.id === user.plantIds?.find((id) => p.id === id && p.active))
+  const plant = enterprise?.plants.find((p) => p.id === user.plantIds?.find((id: string) => p.id === id && p.active))
   const [recipes, setRecipes] = useState<{ id: string; grade: string; name: string; notes: string }[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(`siviotRecipes:${plant?.id || 'none'}`) || '[]')
@@ -2369,18 +2366,12 @@ function Recipes({
 }
 
 function Vehicles({
-  user,
   enterprise,
   onBack,
 }: {
-  user: User
   enterprise: Enterprise | null
   onBack: () => void
 }) {
-  const plantIds = new Set(user.plantIds || [])
-  const drivers = enterprise
-    ? [] // водители будут подключены к этой сущности на следующем этапе
-    : []
   const [vehicles, setVehicles] = useState<{ id: string; number: string; model: string; driver: string }[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(`siviotVehicles:${enterprise?.id || 'none'}`) || '[]')
@@ -2629,114 +2620,6 @@ function Driver({
       )}
 
       <BackButton onClick={onHome} text="На главную" />
-    </Page>
-  )
-}
-
-/* =========================
-   DRIVER ORDER DETAIL
-========================= */
-
-function DriverOrderDetail({
-  order,
-  onBack,
-  onUpdate,
-}: {
-  order: Order
-  onBack: () => void
-  onUpdate: (id: string, changes: Partial<Order>) => void
-}) {
-  return (
-    <Page title={order.id} subtitle="Детали доставки">
-      <div style={styles.card}>
-        <div style={styles.detailTop}>
-          <div>
-            <div style={styles.sectionLabel}>ЗАКАЗ</div>
-            <h2 style={styles.detailTitle}>{order.grade} • {order.volume} м³</h2>
-          </div>
-          <StatusBadge status={order.status} />
-        </div>
-
-        <InfoRow title="Адрес доставки" value={order.address} />
-        <InfoRow title="Дата" value={order.date} />
-        <InfoRow title="Время" value={order.time} />
-        <InfoRow title="Телефон" value={order.phone} />
-        <InfoRow title="Комментарий" value={order.comment || '—'} />
-        <InfoRow title="Машина" value={order.vehicleNumber || 'Не назначена'} />
-        {order.loadedAt && (
-          <InfoRow title="Загружен" value={new Date(order.loadedAt).toLocaleString('ru-RU')} />
-        )}
-        {order.departedAt && (
-          <InfoRow title="Выехал" value={new Date(order.departedAt).toLocaleString('ru-RU')} />
-        )}
-        {order.arrivedAt && (
-          <InfoRow title="Прибыл" value={new Date(order.arrivedAt).toLocaleString('ru-RU')} />
-        )}
-        {order.unloadedAt && (
-          <InfoRow title="Разгрузил" value={new Date(order.unloadedAt).toLocaleString('ru-RU')} />
-        )}
-        {order.returnedAt && (
-          <InfoRow title="Вернулся" value={new Date(order.returnedAt).toLocaleString('ru-RU')} />
-        )}
-      </div>
-
-      {order.status === 'Погружен' && (
-        <button
-          style={styles.primaryButton}
-          onClick={() =>
-            onUpdate(order.id, {
-              status: 'В пути',
-              departedAt: new Date().toISOString(),
-            })
-          }
-        >
-          🚚 ВЫЕХАЛ
-        </button>
-      )}
-
-      {order.status === 'В пути' && (
-        <button
-          style={styles.primaryButton}
-          onClick={() =>
-            onUpdate(order.id, {
-              status: 'Доставлен',
-              arrivedAt: new Date().toISOString(),
-            })
-          }
-        >
-          📍 ПРИБЫЛ
-        </button>
-      )}
-
-      {order.status === 'Доставлен' && (
-        <button
-          style={styles.primaryButton}
-          onClick={() =>
-            onUpdate(order.id, {
-              status: 'Оплачен',
-              unloadedAt: new Date().toISOString(),
-            })
-          }
-        >
-          🏗️ РАЗГРУЗИЛ
-        </button>
-      )}
-
-      {order.status === 'Доставлен' && order.unloadedAt && (
-        <button
-          style={styles.primaryButton}
-          onClick={() =>
-            onUpdate(order.id, {
-              status: 'Завершён',
-              returnedAt: new Date().toISOString(),
-            })
-          }
-        >
-          🔄 ВЕРНУЛСЯ
-        </button>
-      )}
-
-      <BackButton onClick={onBack} text="Назад к доставкам" />
     </Page>
   )
 }
